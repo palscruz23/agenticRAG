@@ -50,14 +50,14 @@ def hybrid_rag_bm25(query: str, tools: list[str] = ['rag', 'bm25'], hist_prompt:
 
     context_text = "\n\n---\n\n".join([doc for doc in results])
     
-    if hist_prompt != "":
-        model = ChatOpenAI(model_name= "gpt-4o", api_key=api_key)
-        response = model.invoke(hist_prompt)
-        hist_text = response.content
-    else:
-        hist_text = "None"
-    PROMPT_TEMPLATE_HIST = f"CHAT HISTORY: \n {hist_text} {PROMPT_TEMPLATE}"
-    prompt_template = ChatPromptTemplate.from_template(PROMPT_TEMPLATE_HIST)
+    # if hist_prompt != "":
+    #     model = ChatOpenAI(model_name= "gpt-4o", api_key=api_key)
+    #     response = model.invoke(hist_prompt)
+    #     hist_text = response.content
+    # else:
+    #     hist_text = "None"
+    # PROMPT_TEMPLATE_HIST = f"CHAT HISTORY: \n {hist_text} {PROMPT_TEMPLATE}"
+    prompt_template = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
     prompt = prompt_template.format(context=context_text, query=query)
 
     model = ChatOpenAI(model_name= "gpt-4o", api_key=api_key)

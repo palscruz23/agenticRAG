@@ -11,6 +11,8 @@ import shutil
 from langchain_chroma import Chroma
 from utils.get_embeddings import get_embedding_function
 import uuid
+from agentic import bootstrap_example
+import json
 
 # Load environment variables
 load_dotenv(find_dotenv())
@@ -20,12 +22,13 @@ CHROMA_PATH =  "./utils/chroma"
 
 def init_chatbot():
     
-    st.sidebar.header("Conversation Options")
+    # st.sidebar.header("Conversation Options")
     st.sidebar.button("Clear conversation", key="clear_conversation")
-    st.sidebar.toggle("Use chat history", key="use_chat_history", value=True)
+    # st.sidebar.toggle("Use chat history", key="use_chat_history", value=True)
 
     # if "topic" not in st.session_state:
     #     st.session_state.topic = "anything in the PDF files"
+
 
     if "title" not in st.session_state:
         folder_path = "knowledge base/"
@@ -59,29 +62,32 @@ def init_chatbot():
     if "reset" not in st.session_state:
         st.session_state.reset = False
 
-## Get the chat history
-def get_chat_history():
-    start_index = max(
-        0, len(st.session_state.messages) - st.session_state.num_chat_messages
-    )
-    return st.session_state.messages[start_index : len(st.session_state.messages) - 1]
+    if "agent" not in st.session_state:
+        st.session_state.agent = bootstrap_example(use_openai=True)
 
-def make_chat_history_summary(chat_history, question):
+# ## Get the chat history
+# def get_chat_history():
+#     start_index = max(
+#         0, len(st.session_state.messages) - st.session_state.num_chat_messages
+#     )
+#     return st.session_state.messages[start_index : len(st.session_state.messages) - 1]
+
+# def make_chat_history_summary(chat_history, question):
     
-    prompt = f"""
-        [INST]
-        Based on the chat history below and the question, generate a query that extend the question with the chat history provided. The query should be in natural language.
-        Answer with only the query. Do not add any explanation.
+#     prompt = f"""
+#         [INST]
+#         Based on the chat history below and the question, generate a query that extend the question with the chat history provided. The query should be in natural language.
+#         Answer with only the query. Do not add any explanation.
 
-        <chat_history>
-        {chat_history}
-        </chat_history>
-        <question>
-        {question}
-        </question>
-        [/INST]
-    """
-    return prompt
+#         <chat_history>
+#         {chat_history}
+#         </chat_history>
+#         <question>
+#         {question}
+#         </question>
+#         [/INST]
+#     """
+#     return prompt
 
 def main():
     init_chatbot()
@@ -216,17 +222,17 @@ def main():
                 st.success("Database reset completed!")
                 st.rerun()
         
-        st.sidebar.header("Retrieval Method")
-        options = ["RAG Vector Search", "BM25 Lexical Search", "Hybrid (RAG + BM25)"]
-        selection = st.radio("Retrieval Options", options, label_visibility="collapsed")
-        if selection == "RAG Vector Search":
-            st.session_state.selected = ["rag"]
-        elif selection == "BM25 Lexical Search":
-            st.session_state.selected = ["bm25"]
-        elif selection == "Hybrid (RAG + BM25)":
-            st.session_state.selected = ["rag", "bm25"]
-        else:
-            st.session_state.selected = ["rag", "bm25"]
+        # st.sidebar.header("Retrieval Method")
+        # options = ["RAG Vector Search", "BM25 Lexical Search", "Hybrid (RAG + BM25)"]
+        # selection = st.radio("Retrieval Options", options, label_visibility="collapsed")
+        # if selection == "RAG Vector Search":
+        #     st.session_state.selected = ["rag"]
+        # elif selection == "BM25 Lexical Search":
+        #     st.session_state.selected = ["bm25"]
+        # elif selection == "Hybrid (RAG + BM25)":
+        #     st.session_state.selected = ["rag", "bm25"]
+        # else:
+        #     st.session_state.selected = ["rag", "bm25"]
 
             
     if files:
@@ -248,16 +254,19 @@ def main():
                 message_placeholder = st.empty()
                 question = question.replace("'", "")
                 with st.spinner("Thinking..."):
-                    if st.session_state.use_chat_history:
-                        chat_history = get_chat_history()
-                        if chat_history == []:
-                            hist_prompt = ""
-                        else:
-                            hist_prompt = make_chat_history_summary(chat_history, question)
-                    else:
-                        hist_prompt = ""
-                    response, sources =  hybrid_rag_bm25(question, st.session_state.selected, hist_prompt)
+                    # if st.session_state.use_chat_history:
+                    #     chat_history = get_chat_history()
+                    #     if chat_history == []:
+                    #         hist_prompt = ""
+                    #     else:
+                    #         hist_prompt = make_chat_history_summary(chat_history, question)
+                    # else:
+                    #     hist_prompt = ""
+                    response, trace = st.session_state.agent.run(question, return_trace=True)
                     message_placeholder.markdown(response)
+
+                    with st.expander("🔍 Step-by-step trace"):
+                        st.json(trace)
 
             st.session_state.messages.append(
                 {"role": "assistant", "content": response}
