@@ -27,18 +27,11 @@ def reciprocal_rank_fusion(rankings, k=60):
     # sort by highest RRF score
     return sorted(scores.items(), key=lambda x: x[1], reverse=True)
 
-def hybrid_rag_bm25(query: str, tools: list[str] = ['rag', 'bm25'], hist_prompt: str = ""):
-
+def hybrid_rag_bm25(query: str):
+    print("RAG starting....")
     rag_content, rag_sources = context_rag(query)
     bm25_content, bm25_sources, chunks_with_ids = context_bm25(query)
-    
-    sources = []
-    if 'rag' in tools:
-        sources.append(rag_sources)
-    if 'bm25' in tools:
-        sources.append(bm25_sources)
-
-    fused = reciprocal_rank_fusion(sources)
+    fused = reciprocal_rank_fusion(['rag', 'bm25'])
     results = []
     sources = []
     print(fused)

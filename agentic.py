@@ -15,7 +15,8 @@ from collections import defaultdict
 from dotenv import load_dotenv
 from utils.hybrid import hybrid_rag_bm25
 import requests
-
+import streamlit as st
+import uuid
 # Load environment variables
 load_dotenv(".env")
 
@@ -78,6 +79,10 @@ def tok(s: str) -> List[str]:
 def safe_truncate(s: str, n: int) -> str:
     return s if len(s) <= n else s[: n - 3] + "..."
 
+def rough_tokens(s: str) -> int:
+    """Rough token counter: assume ~4 chars = 1 token"""
+    return max(1, len(s) // 4)
+
 # ===============================
 # LLM adapters
 # ===============================
@@ -86,7 +91,7 @@ class BaseLLM:
         raise NotImplementedError
 
 class OpenAILLM(BaseLLM):
-    def __init__(self, model: str = "gpt-4o-mini"):
+    def __init__(self, model: str = "gpt-4.1-mini"):
         if OpenAI is None:
             raise RuntimeError("openai SDK not available. pip install openai>=1.0.0")
         self.model = model
@@ -166,35 +171,113 @@ def tool_rag(args: Dict[str, Any]) -> Dict[str, Any]:
     if hybrid_rag_bm25 is None:
         raise RuntimeError("query_rag helper not available")
     query = args["query"]
+    print(query)
     formatted_response, _ = hybrid_rag_bm25(query)
     return {"result": formatted_response}
 
 
 def tool_internet(args: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Simple web search tool using DuckDuckGo Instant Answer API.
-    Input: {"query": "what is the capital of Japan?"}
-    Output: {"result": "Tokyo is the capital of Japan."}
+    Input: {"query": str, "k": int=5}
+    Returns: {"answer": str, "results": [{"title","url","content"}], "provider": str}
     """
-    query = args["query"]
-    try:
-        resp = requests.get(
-            "https://api.duckduckgo.com/",
-            params={"q": query, "format": "json"},
-            timeout=10,
-        )
-        data = resp.json()
-        answer = data.get("AbstractText") or data.get("Heading") or "No direct answer found."
-        return {"result": answer}
-    except Exception as e:
-        return {"error": str(e)}
+    q = args.get("query", "").strip()
+    if not q:
+        raise ValueError("internet tool requires 'query'")
+    k = int(args.get("k", 5))
+
+    api_key = os.getenv("TAVILY_API_KEY")
+    results: List[Dict[str, Any]] = []
+    answer: Optional[str] = None
+    provider = ""
+
+    # Preferred: Tavily (reliable web search with built-in summarization)
+    if api_key:
+        try:
+            r = requests.post(
+                "https://api.tavily.com/search",
+                json={
+                    "api_key": api_key,
+                    "query": q,
+                    "max_results": k,
+                    "include_answer": True,
+                    "search_depth": "advanced",
+                },
+                timeout=15,
+            )
+            data = r.json()
+            answer = data.get("answer")
+            for item in data.get("results", [])[:k]:
+                results.append({
+                    "title": item.get("title"),
+                    "url": item.get("url"),
+                    "content": safe_truncate(item.get("content", ""), 600),
+                })
+            provider = "tavily"
+        except Exception as e:
+            return {"error": f"Tavily error: {e}"}
+    else:
+        # Fallback 1: DuckDuckGo Instant Answer (quick but shallow)
+        try:
+            r = requests.get(
+                "https://api.duckduckgo.com/",
+                params={"q": q, "format": "json", "no_html": 1, "t": "agent"},
+                timeout=10,
+            )
+            jj = r.json()
+            answer = jj.get("AbstractText") or jj.get("Answer") or None
+            related = jj.get("RelatedTopics", [])
+            for t in related[:k]:
+                if isinstance(t, dict):
+                    results.append({
+                        "title": t.get("Text") or t.get("FirstURL"),
+                        "url": t.get("FirstURL"),
+                        "content": "",
+                    })
+            provider = "duckduckgo"
+        except Exception as e:
+            return {"error": f"DuckDuckGo error: {e}"}
+
+        # Fallback 2: Wikipedia summary if still no answer
+        if not answer:
+            try:
+                title = q.replace(" ", "_")
+                wr = requests.get(
+                    f"https://en.wikipedia.org/api/rest_v1/page/summary/{title}",
+                    timeout=6,
+                )
+                if wr.status_code == 200:
+                    wj = wr.json()
+                    answer = wj.get("extract")
+                    results.insert(0, {
+                        "title": wj.get("title"),
+                        "url": (wj.get("content_urls", {}) or {}).get("desktop", {}).get("page"),
+                        "content": safe_truncate(answer or "", 600),
+                    })
+                    provider = "wikipedia"
+            except Exception:
+                pass
+
+    return {
+        "answer": answer or "No answer found from available providers.",
+        "results": results,
+        "provider": provider or ("tavily" if api_key else "duckduckgo/wikipedia"),
+    }
 
 # ===============================
 # Memory (JSONL + tf-idf-ish)
 # ===============================
 @dataclass
 class Memory:
-    path: str = "memory.jsonl"
+    if "session_id" not in st.session_state:
+        st.session_state.session_id = str(uuid.uuid4())
+        
+    if "session_dir" not in st.session_state:
+        session_dir = os.path.join("temp_uploads", st.session_state.session_id)
+        os.makedirs(session_dir, exist_ok=True)
+        st.session_state.session_dir = session_dir
+    path: str =  os.path.join(st.session_state.session_dir, "memory.jsonl")
+    
     _cache: List[Dict[str, Any]] = field(default_factory=list)
 
     def __post_init__(self):
@@ -244,6 +327,7 @@ class Agent:
     config: AgentConfig = field(default_factory=AgentConfig)
 
     def run(self, user_goal: str, *, debug: Optional[bool] = None, return_trace: bool = False) -> Union[str, Tuple[str, List[Dict[str, Any]]]]:
+        total_in, total_out = 0, 0
         debug = self.config.debug if debug is None else debug
         trace: List[Dict[str, Any]] = []
         transcript: List[Dict[str, str]] = []
@@ -257,7 +341,12 @@ class Agent:
             context = self._build_context(user_goal, transcript)
             thought = self.llm.complete(context, temperature=self.config.temperature)
             transcript.append({"role":"assistant","content": thought})
-
+            # Token accounting
+            tokens_in = rough_tokens(context)
+            tokens_out = rough_tokens(thought)
+            total_in += tokens_in
+            total_out += tokens_out
+            plog(f"Step {step} Tokens used: prompt≈{tokens_in}, output≈{tokens_out}")
             thought_line = _extract_first_line(thought, prefix="Thought:")
             plog(f"Step {step} Thought: {thought_line}")
 
@@ -305,6 +394,7 @@ class Agent:
                 "action": action,
                 "observation": obs,
                 "critique": critique_text,
+                "tokens": {"in": tokens_in, "out": tokens_out}
             })
 
         fallback = "I reached my step limit. Best effort summary: "
@@ -312,6 +402,8 @@ class Agent:
         final = fallback + best
         self.memory.add("final_answer", final, {"steps": "limit"})
         plog(f"Final (limit): {safe_truncate(final, 200)}")
+        plog(f"Total tokens used: prompt≈{total_in}, output≈{total_out}")
+        # return final, trace, total_in + total_out if return_trace else final
         return (final, trace) if return_trace else final
 
     def _build_context(self, user_goal: str, transcript: List[Dict[str, str]]) -> str:
@@ -328,9 +420,18 @@ class Agent:
 You are an agent that Plans, Acts (via tools), Reflects, and Answers.
 Follow this strict output format on each step:
 - Start with a short "Thought: ..." line explaining your next best action.
+- If the user asks about something that is not covered in the uploaded document
+AND is not directly relevant for web lookup, you must reply:
+"Sorry, I can only answer questions based on the uploaded document."
+Do NOT answer from your own general knowledge.
+- Do not make up information or do not provide information based on common knowledge. 
+- You must never call the "internet" tool unless the user’s question is
+directly about the uploaded document. If the question is unrelated to
+the document, ignore the internet tool and either answer from your own
+knowledge or respond that you cannot use the internet for this.
 - If using a tool, output a single line: Action: <tool_name> <JSON-args>
 - If ready to answer, output:
-  Final: <your best {style} answer>
+  Final: <your best {style} answer>. If no reliable answer is found from tools or memory, output: Final: I don’t know.
   (Your Final answer can be multi-line and detailed. If the task is open-ended, provide a thorough response.)
 
 User goal: {user_goal}
@@ -412,18 +513,18 @@ def bootstrap_example(use_openai: bool = True) -> Agent:
     
     tools.register(Tool(
         name="rag",
-        description="Retrieves semantic context and keyword search from the knowledge base.",
+        description="Retrieves semantic context and keyword search from uploaded knowledge source. When the query has document, it pertains to the uploaded document.",
         schema={
-            "type":"object",
-            "properties": {"content": {"type":"string"}},
-            "required":["content"],
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+            "required": ["query"],
         },
         func=tool_rag,
     ))
 
     tools.register(Tool(
         name="search_memory",
-        description="Semantic-ish search over long-term memory store.",
+        description="If memory exist, performs historical search over long-term memory store.",
         schema={
             "type":"object",
             "properties": {"query": {"type":"string"}, "k": {"type":"integer"}},
@@ -445,10 +546,11 @@ def bootstrap_example(use_openai: bool = True) -> Agent:
 
     tools.register(Tool(
         name="internet",
-        description="Look up real-time information from the web. Useful for current events and facts.",
+        description=("Look up information from the web ONLY if it directly relates to the uploaded document's content (e.g., context, citations, clarifications). " \
+        "Do NOT use it for unrelated questions."),
         schema={
             "type": "object",
-            "properties": {"query": {"type": "string"}},
+            "properties": {"query": {"type": "string"}, "k": {"type": "integer"}},
             "required": ["query"],
         },
         func=tool_internet,
@@ -460,7 +562,7 @@ def bootstrap_example(use_openai: bool = True) -> Agent:
         llm=llm,
         tools=tools,
         memory=memory,
-        config=AgentConfig(max_steps=20, reflection=True, debug=True),
+        config=AgentConfig(max_steps=10, reflection=True, debug=True),
     )
     return agent
 

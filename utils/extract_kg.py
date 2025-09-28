@@ -32,7 +32,7 @@ neo4j_driver = neo4j.GraphDatabase.driver(uri=os.environ["NEO4J_URI"],
                                           database=database)
 
 ex_llm=OpenAILLM(
-   model_name="gpt-4o-mini",
+   model_name="gpt-4.1-mini",
    model_params={
        "response_format": {"type": "json_object"},
        "temperature": 0
