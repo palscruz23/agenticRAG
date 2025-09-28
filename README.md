@@ -1,5 +1,5 @@
 ---
-title: Hybrid RAG
+title: AgenticAI
 emoji: 📚
 colorFrom: blue
 colorTo: green
