@@ -39,7 +39,7 @@ def init_chatbot():
             st.session_state.title = title
             st.session_state.topic = topic
         else:
-            st.session_state.title = "Personal Chatbot"
+            st.session_state.title = "Agentic PDF Chatbot"
             st.session_state.topic = "anything in the PDF files"
     
     if st.session_state.clear_conversation or "messages" not in st.session_state:
