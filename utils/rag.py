@@ -46,7 +46,7 @@ def query_rag(query: str):
         embedding_function=get_embedding_function()
     )
     # Search the DB.
-    query_context = f"What are the failure modes of a {query}? and how do they happen?"
+    query_context = query
     results = st.session_state.vectorstore.similarity_search_with_score(query_context, k=5)
     results = list(reversed(results))
 
@@ -70,7 +70,7 @@ def context_rag(query: str):
     )
 
     # Search the DB.
-    query_context = f"What are the failure modes of a {query}? and how do they happen?"
+    query_context = query
     results = st.session_state.vectorstore.similarity_search_with_score(query_context, k=5)
     results = list(reversed(results))
 

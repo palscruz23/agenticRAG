@@ -31,7 +31,11 @@ def hybrid_rag_bm25(query: str):
     print("RAG starting....")
     rag_content, rag_sources = context_rag(query)
     bm25_content, bm25_sources, chunks_with_ids = context_bm25(query)
-    fused = reciprocal_rank_fusion(['rag', 'bm25'])
+    sources = []
+    sources.append(rag_sources)
+    sources.append(bm25_sources)
+
+    fused = reciprocal_rank_fusion(sources)
     results = []
     sources = []
     print(fused)

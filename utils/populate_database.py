@@ -41,7 +41,6 @@ def split_documents(documents: list[Document]):
 def add_to_chroma(chunks: list[Document]):
     # Load the existing database.
     st.session_state.vectorstore = Chroma(
-        persist_directory=None,
         embedding_function=get_embedding_function()
     )
     # Calculate Page IDs.
