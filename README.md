@@ -1,12 +1,14 @@
 ---
 title: AgenticAI
-emoji: 📚
-colorFrom: blue
-colorTo: green
+emoji: 🚀
+colorFrom: indigo
+colorTo: yellow
 sdk: streamlit
-sdk_version: "1.49.1"
+sdk_version: 1.49.1
 app_file: app.py
 pinned: false
+license: mit
+short_description: 'PDF Chat with AgenticAI. '
 ---
 
 # Agentic AI 🤖
