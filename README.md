@@ -20,6 +20,8 @@ This project is a **agentic AI framework** with hybrid RAG system. It demonstrat
 
 It is designed to be simple, extensible, and easy to plug into applications (e.g., Streamlit chatbots).
 
+Accesible in Hugging Face space - [https://huggingface.co/spaces/polojuan/agenticAI](https://huggingface.co/spaces/polojuan/agenticAI)
+
 ---
 
 ## 🏗️ Architecture
