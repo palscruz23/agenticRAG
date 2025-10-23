@@ -1,17 +1,17 @@
 ---
-title: AgenticAI
+title: AgenticRAG
 emoji: 🚀
 colorFrom: indigo
 colorTo: yellow
 sdk: streamlit
-sdk_version: 1.49.1
+sdk_version: 1.50.0
 app_file: app.py
 pinned: false
 license: mit
 short_description: 'PDF Chat with AgenticAI. '
 ---
 
-# Agentic AI 🤖
+# Agentic RAG 🤖
 
 ## 📌 Overview
 This project is a **agentic AI framework** with hybrid RAG system. It demonstrates how to build an LLM-powered agent that can:
