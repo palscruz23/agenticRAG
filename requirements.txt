@@ -12,3 +12,5 @@ langchain.tools
 langchain-chroma
 pandas
 rank-bm25
+langchain-core
+langchain 
