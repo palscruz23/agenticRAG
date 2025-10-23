@@ -3,7 +3,7 @@ import shutil
 from langchain_community.document_loaders import PyPDFDirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
-from langchain.schema.document import Document
+from langchain_core.document import Document
 from utils.get_embeddings import get_embedding_function
 from dotenv import find_dotenv, load_dotenv
 import streamlit as st
